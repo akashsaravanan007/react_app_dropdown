@@ -1,52 +1,157 @@
-import React, { useState, useEffect } from 'react';
-import './App.css';
+import React, { useState, useEffect } from "react";
+import "./App.css";
 
-const generateRandomData = () => {
-  const data = [];
-  for (let i = 1; i <= 10; i++) {
-    data.push({
-      id: i,
-      name: `User ${i}`,
-      age: Math.floor(Math.random() * 30) + 20,
-      isChecked: false,
-      dropdownValue: 'OED',
-    });
-  }
-  return data;
-};
-
-const App = () => {
-  const [tableData, setTableData] = useState(() => {
-  const savedData = JSON.parse(localStorage.getItem('tableData'));
-    return savedData || generateRandomData();
+const UserForm = () => {
+  const [userData, setUserData] = useState({
+    name: "",
+    age: "",
+    isChecked: false,
+    dropdownValue: "OED",
   });
 
-  const [updateMessage, setUpdateMessage] = useState('');
+  const [userList, setUserList] = useState([]);
+  const [editUserId, setEditUserId] = useState(null);
 
-  const handleCheckboxChange = (id) => {
-    setTableData((prevData) =>
-      prevData.map((item) =>
-        item.id === id ? { ...item, isChecked: !item.isChecked } : item
-      )
-    );
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setUserData((prevData) => ({
+      ...prevData,
+      [name]: type === "checkbox" ? checked : value,
+    }));
   };
 
-  const handleDropdownChange = (id, value) => {
-    setTableData((prevData) =>
-      prevData.map((item) =>
-        item.id === id ? { ...item, dropdownValue: value } : item
-      )
-    );
-  };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (editUserId) {
+      // If editUserId is present, it means we are editing an existing user
+      try {
+        const response = await fetch(`http://localhost:5000/api/users/${editUserId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(userData),
+        });
 
-  const handleUpdateClick = () => {
-    localStorage.setItem('tableData', JSON.stringify(tableData));
-    setUpdateMessage('Details updated successfully');
-    setTimeout(() => setUpdateMessage(''), 3000);
-  };
+        const updatedUser = await response.json();
+
+        setUserList((prevList) =>
+          prevList.map((user) => (user._id === editUserId ? updatedUser : user))
+        );
+
+        setEditUserId(null);
+      } catch (error) {
+        console.error("Error updating user data:", error);
+      }
+    } else {
+
+    try {
+      const response = await fetch("http://localhost:5000/api/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(userData),
+      });
+
+      const newUser = await response.json();
+      setUserList((prevList) => [...prevList, newUser]);
+    } catch (error) {
+      console.error("Error submitting user data:", error);
+    }
+  }
+
+  setUserData({
+    name: "",
+    age: "",
+    isChecked: false,
+    dropdownValue: "OED",
+  });
+};
+
+const handleEdit = (userId) => {
+  const userToEdit = userList.find((user) => user._id === userId);
+  setUserData({ ...userToEdit });
+  setEditUserId(userId);
+};
+
+const handleDelete = async (userId) => {
+  try {
+    await fetch(`http://localhost:5000/api/users/${userId}`, {
+      method: "DELETE",
+    });
+
+    setUserList((prevList) => prevList.filter((user) => user._id !== userId));
+  } catch (error) {
+    console.error("Error deleting user data:", error);
+  }
+};
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch("http://localhost:5000/api/users");
+        const users = await response.json();
+        setUserList(users);
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      }
+    };
+
+    fetchUsers();
+  }, []);
 
   return (
     <div>
+      <form onSubmit={handleSubmit}>
+        <label>
+          Name:
+          <input
+            type="text"
+            name="name"
+            value={userData.name}
+            onChange={handleChange}
+          />
+        </label>
+        <br />
+        <label>
+          Age:
+          <input
+            type="text"
+            name="age"
+            value={userData.age}
+            onChange={handleChange}
+          />
+        </label>
+        <br />
+        <label>
+          Checkbox:
+          <input
+            type="checkbox"
+            name="isChecked"
+            checked={userData.isChecked}
+            onChange={handleChange}
+          />
+        </label>
+        <br />
+        <label>
+          Dropdown:
+          <select
+            name="dropdownValue"
+            value={userData.dropdownValue}
+            onChange={handleChange}
+          >
+            <option value="OED">OED</option>
+            <option value="ODM">ODM</option>
+            <option value="OOM">OOM</option>
+          </select>
+        </label>
+        <br />
+        <button type="submit">{editUserId ? "Update" : "Submit"}</button>
+      </form>
+
+      <h2>User Table</h2>
       <table>
         <thead>
           <tr>
@@ -58,37 +163,25 @@ const App = () => {
           </tr>
         </thead>
         <tbody>
-          {tableData.map((item) => (
-            <tr key={item.id}>
-              <td>{item.id}</td>
-              <td>{item.name}</td>
-              <td>{item.age}</td>
+          {userList.map((user) => (
+            <tr key={user._id}>
+              <td>{user._id}</td>
+              <td>{user.name}</td>
+              <td>{user.age}</td>
+              <td>{user.isChecked ? "Checked" : "Unchecked"}</td>
+              <td>{user.dropdownValue}</td>
               <td>
-                <input
-                  type="checkbox"
-                  checked={item.isChecked}
-                  onChange={() => handleCheckboxChange(item.id)}
-                />
+                <button onClick={() => handleEdit(user._id)}>Edit</button>
               </td>
               <td>
-                <select
-                  disabled={!item.isChecked}
-                  value={item.dropdownValue}
-                  onChange={(e) => handleDropdownChange(item.id, e.target.value)}
-                >
-                  <option value="OED">OED</option>
-                  <option value="ODM">ODM</option>
-                  <option value="OOM">OOM</option>
-                </select>
+                <button onClick={() => handleDelete(user._id)}>Delete</button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <button onClick={handleUpdateClick}>Update</button>
-      {updateMessage && <p>{updateMessage}</p>}
     </div>
   );
 };
 
-export default App;
+export default UserForm;
